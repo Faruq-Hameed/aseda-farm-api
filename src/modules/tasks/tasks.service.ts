@@ -11,11 +11,10 @@ export { CreateTaskDto, UpdateTaskDto, CompleteTaskDto, TaskFilterDto };
 export class TasksService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(userId: string, filter: TaskFilterDto = {}) {
-    const farm = await this.getFarm(userId);
+  async findAll(farmId: string, filter: TaskFilterDto = {}) {
     return this.prisma.task.findMany({
       where: {
-        farmId: farm.id,
+        farmId,
         ...(filter.status && { status: filter.status }),
         ...(filter.category && { category: filter.category }),
         ...(filter.batchId && { batchId: filter.batchId }),
@@ -26,21 +25,19 @@ export class TasksService {
     });
   }
 
-  async findOne(id: string, userId: string) {
-    const farm = await this.getFarm(userId);
+  async findOne(id: string, farmId: string) {
     const task = await this.prisma.task.findFirst({
-      where: { id, farmId: farm.id },
+      where: { id, farmId },
       include: { batch: true },
     });
     if (!task) throw new NotFoundException('Task not found');
     return task;
   }
 
-  async create(dto: CreateTaskDto, userId: string) {
-    const farm = await this.getFarm(userId);
-    return this.prisma.task.create({
+  async create(dto: CreateTaskDto, farmId: string, userId: string) {
+    const task = await this.prisma.task.create({
       data: {
-        farmId: farm.id,
+        farmId,
         batchId: dto.batchId || null,
         title: dto.title,
         description: dto.description,
@@ -55,11 +52,12 @@ export class TasksService {
         recurEvery: dto.recurEvery ? Number(dto.recurEvery) : null,
       },
     });
+    await this.prisma.changeLog.create({ data: { entityType: 'Task', entityId: task.id, action: 'create', userId, after: task } });
+    return task;
   }
 
-  async update(id: string, dto: UpdateTaskDto, userId: string) {
-    const farm = await this.getFarm(userId);
-    const task = await this.prisma.task.findFirst({ where: { id, farmId: farm.id } });
+  async update(id: string, dto: UpdateTaskDto, farmId: string, userId: string) {
+    const task = await this.prisma.task.findFirst({ where: { id, farmId } });
     if (!task) throw new NotFoundException('Task not found');
     const updated = await this.prisma.task.update({
       where: { id },
@@ -69,11 +67,10 @@ export class TasksService {
     return updated;
   }
 
-  async complete(id: string, dto: CompleteTaskDto, userId: string) {
-    const farm = await this.getFarm(userId);
+  async complete(id: string, dto: CompleteTaskDto, farmId: string, userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const task = await this.prisma.task.findFirst({
-      where: { id, farmId: farm.id },
+      where: { id, farmId },
       include: { batch: true },
     });
     if (!task) throw new NotFoundException('Task not found');
@@ -94,7 +91,7 @@ export class TasksService {
 
     await this.prisma.activityLog.create({
       data: {
-        farmId: farm.id,
+        farmId,
         batchId: task.batchId,
         userId,
         type: task.category,
@@ -114,7 +111,7 @@ export class TasksService {
       nextDue.setDate(nextDue.getDate() + task.recurEvery);
       await this.prisma.task.create({
         data: {
-          farmId: farm.id,
+          farmId,
           batchId: task.batchId,
           title: task.title,
           description: task.description,
@@ -133,9 +130,8 @@ export class TasksService {
     return updated;
   }
 
-  async remove(id: string, userId: string) {
-    const farm = await this.getFarm(userId);
-    const task = await this.prisma.task.findFirst({ where: { id, farmId: farm.id } });
+  async remove(id: string, farmId: string, userId: string) {
+    const task = await this.prisma.task.findFirst({ where: { id, farmId } });
     if (!task) throw new NotFoundException('Task not found');
     await this.prisma.task.delete({ where: { id } });
     await this.prisma.changeLog.create({ data: { entityType: 'Task', entityId: id, action: 'delete', userId, before: task } });
@@ -149,11 +145,5 @@ export class TasksService {
       where: { farmId, dueDate: { lt: today }, status: { in: ['pending', 'in_progress'] } },
       data: { status: 'overdue' },
     });
-  }
-
-  private async getFarm(userId: string) {
-    const farm = await this.prisma.farm.findUnique({ where: { ownerId: userId } });
-    if (!farm) throw new NotFoundException('No farm found for this user');
-    return farm;
   }
 }

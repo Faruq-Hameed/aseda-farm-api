@@ -17,7 +17,7 @@ export class SeedService {
         name: 'ASEDA Farm Admin',
         email: 'admin@asedafarm.ng',
         password: hashed,
-        role: 'owner',
+        role: 'OWNER',
       },
     });
 
@@ -36,6 +36,13 @@ export class SeedService {
         totalAcres: 5.0,
         ownerId: user.id,
       },
+    });
+
+    // Ensure the admin user has a FarmMember record as OWNER
+    await this.prisma.farmMember.upsert({
+      where: { farmId_userId: { farmId: farm.id, userId: user.id } },
+      update: {},
+      create: { farmId: farm.id, userId: user.id, role: 'OWNER', addedById: user.id },
     });
 
     const batch1PlantingDate = new Date('2026-04-21');

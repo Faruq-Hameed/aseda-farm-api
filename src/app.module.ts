@@ -14,6 +14,7 @@ import { EmailModule } from './modules/email/email.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { SeedModule } from './modules/seed/seed.module';
+import { MembersModule } from './modules/members/members.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { SeedModule } from './modules/seed/seed.module';
     AnalyticsModule,
     SchedulerModule,
     SeedModule,
+    MembersModule,
   ],
 })
 export class AppModule {}

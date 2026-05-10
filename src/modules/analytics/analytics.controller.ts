@@ -9,6 +9,6 @@ export class AnalyticsController {
 
   @Get()
   getSummary(@Request() req: any) {
-    return this.analyticsService.getSummary(req.user.userId);
+    return this.analyticsService.getSummary(req.user.farmId);
   }
 }

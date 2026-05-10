@@ -9,7 +9,7 @@ export class NotificationsController {
 
   @Get()
   findAll(@Request() req: any, @Query('limit') limit?: string) {
-    return this.notificationsService.findAll(req.user.userId, limit ? parseInt(limit) : undefined);
+    return this.notificationsService.findAll(req.user.userId, limit ? parseInt(limit) : 50);
   }
 
   @Post(':id/read')
@@ -22,6 +22,7 @@ export class NotificationsController {
     return this.notificationsService.markAllRead(req.user.userId);
   }
 
+  // 'all' must come BEFORE ':id' so it is not swallowed by the parameterised route
   @Delete('all')
   removeAll(@Request() req: any) {
     return this.notificationsService.removeAll(req.user.userId);

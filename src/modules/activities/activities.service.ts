@@ -9,41 +9,38 @@ export { CreateActivityDto, UpdateActivityDto };
 export class ActivitiesService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(userId: string, batchId?: string, type?: string, limit?: number) {
-    const farm = await this.getFarm(userId);
+  async findAll(farmId: string, batchId?: string, type?: string, limit?: number) {
     return this.prisma.activityLog.findMany({
       where: {
-        farmId: farm.id,
+        farmId,
         ...(batchId && { batchId }),
         ...(type && { type }),
       },
       include: {
         batch: { select: { id: true, name: true } },
-        user: { select: { name: true } },
+        user: { select: { id: true, name: true } },
       },
       orderBy: { date: 'desc' },
       ...(limit && { take: limit }),
     });
   }
 
-  async findOne(id: string, userId: string) {
-    const farm = await this.getFarm(userId);
+  async findOne(id: string, farmId: string) {
     const activity = await this.prisma.activityLog.findFirst({
-      where: { id, farmId: farm.id },
+      where: { id, farmId },
       include: {
         batch: { select: { id: true, name: true } },
-        user: { select: { name: true } },
+        user: { select: { id: true, name: true } },
       },
     });
     if (!activity) throw new NotFoundException('Activity not found');
     return activity;
   }
 
-  async create(dto: CreateActivityDto, userId: string) {
-    const farm = await this.getFarm(userId);
+  async create(dto: CreateActivityDto, farmId: string, userId: string) {
     const activity = await this.prisma.activityLog.create({
       data: {
-        farmId: farm.id,
+        farmId,
         batchId: dto.batchId || null,
         userId,
         type: dto.type,
@@ -62,9 +59,8 @@ export class ActivitiesService {
     return activity;
   }
 
-  async update(id: string, dto: UpdateActivityDto, userId: string) {
-    const farm = await this.getFarm(userId);
-    const existing = await this.prisma.activityLog.findFirst({ where: { id, farmId: farm.id } });
+  async update(id: string, dto: UpdateActivityDto, farmId: string, userId: string) {
+    const existing = await this.prisma.activityLog.findFirst({ where: { id, farmId } });
     if (!existing) throw new NotFoundException('Activity not found');
 
     const updated = await this.prisma.activityLog.update({
@@ -87,9 +83,8 @@ export class ActivitiesService {
     return updated;
   }
 
-  async remove(id: string, userId: string) {
-    const farm = await this.getFarm(userId);
-    const existing = await this.prisma.activityLog.findFirst({ where: { id, farmId: farm.id } });
+  async remove(id: string, farmId: string, userId: string) {
+    const existing = await this.prisma.activityLog.findFirst({ where: { id, farmId } });
     if (!existing) throw new NotFoundException('Activity not found');
     await this.prisma.activityLog.delete({ where: { id } });
     await this.logChange('ActivityLog', id, 'delete', userId, existing, null);
@@ -100,11 +95,5 @@ export class ActivitiesService {
     await this.prisma.changeLog.create({
       data: { entityType, entityId, action, userId, ...(before != null && { before }), ...(after != null && { after }) },
     });
-  }
-
-  private async getFarm(userId: string) {
-    const farm = await this.prisma.farm.findUnique({ where: { ownerId: userId } });
-    if (!farm) throw new NotFoundException('No farm found');
-    return farm;
   }
 }

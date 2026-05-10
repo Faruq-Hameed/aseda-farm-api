@@ -9,26 +9,23 @@ export { CreateExpenseDto, UpdateExpenseDto };
 export class ExpensesService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(userId: string) {
-    const farm = await this.getFarm(userId);
+  async findAll(farmId: string) {
     return this.prisma.expense.findMany({
-      where: { farmId: farm.id },
+      where: { farmId },
       orderBy: { date: 'desc' },
     });
   }
 
-  async findOne(id: string, userId: string) {
-    const farm = await this.getFarm(userId);
-    const expense = await this.prisma.expense.findFirst({ where: { id, farmId: farm.id } });
+  async findOne(id: string, farmId: string) {
+    const expense = await this.prisma.expense.findFirst({ where: { id, farmId } });
     if (!expense) throw new NotFoundException('Expense not found');
     return expense;
   }
 
-  async create(dto: CreateExpenseDto, userId: string) {
-    const farm = await this.getFarm(userId);
+  async create(dto: CreateExpenseDto, farmId: string, userId: string) {
     const expense = await this.prisma.expense.create({
       data: {
-        farmId: farm.id,
+        farmId,
         category: dto.category,
         item: dto.item,
         amount: Number(dto.amount),
@@ -42,9 +39,8 @@ export class ExpensesService {
     return expense;
   }
 
-  async update(id: string, dto: UpdateExpenseDto, userId: string) {
-    const farm = await this.getFarm(userId);
-    const existing = await this.prisma.expense.findFirst({ where: { id, farmId: farm.id } });
+  async update(id: string, dto: UpdateExpenseDto, farmId: string, userId: string) {
+    const existing = await this.prisma.expense.findFirst({ where: { id, farmId } });
     if (!existing) throw new NotFoundException('Expense not found');
     const updated = await this.prisma.expense.update({
       where: { id },
@@ -62,9 +58,8 @@ export class ExpensesService {
     return updated;
   }
 
-  async remove(id: string, userId: string) {
-    const farm = await this.getFarm(userId);
-    const existing = await this.prisma.expense.findFirst({ where: { id, farmId: farm.id } });
+  async remove(id: string, farmId: string, userId: string) {
+    const existing = await this.prisma.expense.findFirst({ where: { id, farmId } });
     if (!existing) throw new NotFoundException('Expense not found');
     await this.prisma.expense.delete({ where: { id } });
     await this.logChange('Expense', id, 'delete', userId, existing, null);
@@ -75,11 +70,5 @@ export class ExpensesService {
     await this.prisma.changeLog.create({
       data: { entityType, entityId, action, userId, ...(before != null && { before }), ...(after != null && { after }) },
     });
-  }
-
-  private async getFarm(userId: string) {
-    const farm = await this.prisma.farm.findUnique({ where: { ownerId: userId } });
-    if (!farm) throw new NotFoundException('No farm found');
-    return farm;
   }
 }

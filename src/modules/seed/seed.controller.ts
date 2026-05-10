@@ -1,6 +1,7 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Post, UseGuards, Get } from '@nestjs/common';
 import { SeedService } from './seed.service';
 import { ConfigService } from '@nestjs/config';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('seed')
 export class SeedController {
@@ -10,6 +11,7 @@ export class SeedController {
   ) {}
 
   @Get()
+  // @UseGuards(JwtAuthGuard)
   seed() {
     if (this.config.get('NODE_ENV') === 'production') {
       return { error: 'Not allowed in production' };

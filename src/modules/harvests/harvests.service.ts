@@ -9,40 +9,35 @@ export { CreateHarvestDto, UpdateHarvestDto };
 export class HarvestsService {
   constructor(private prisma: PrismaService) {}
 
-  async findBunchHarvests(userId: string) {
-    const farm = await this.getFarm(userId);
+  async findBunchHarvests(farmId: string) {
     return this.prisma.harvest.findMany({
-      where: { farmId: farm.id },
+      where: { farmId },
       include: { batch: { select: { id: true, name: true } } },
       orderBy: { harvestDate: 'desc' },
     });
   }
 
-  async findSuckerHarvests(userId: string) {
-    const farm = await this.getFarm(userId);
+  async findSuckerHarvests(farmId: string) {
     return this.prisma.suckerHarvest.findMany({
-      where: { batch: { farmId: farm.id } },
+      where: { batch: { farmId } },
       include: { batch: { select: { id: true, name: true } } },
       orderBy: { harvestDate: 'desc' },
     });
   }
 
-  async findOneBunch(id: string, userId: string) {
-    const farm = await this.getFarm(userId);
-    const harvest = await this.prisma.harvest.findFirst({ where: { id, farmId: farm.id }, include: { batch: { select: { id: true, name: true } } } });
+  async findOneBunch(id: string, farmId: string) {
+    const harvest = await this.prisma.harvest.findFirst({ where: { id, farmId }, include: { batch: { select: { id: true, name: true } } } });
     if (!harvest) throw new NotFoundException('Harvest not found');
     return harvest;
   }
 
-  async findOneSucker(id: string, userId: string) {
-    const farm = await this.getFarm(userId);
-    const harvest = await this.prisma.suckerHarvest.findFirst({ where: { id, batch: { farmId: farm.id } }, include: { batch: { select: { id: true, name: true } } } });
+  async findOneSucker(id: string, farmId: string) {
+    const harvest = await this.prisma.suckerHarvest.findFirst({ where: { id, batch: { farmId } }, include: { batch: { select: { id: true, name: true } } } });
     if (!harvest) throw new NotFoundException('Sucker harvest not found');
     return harvest;
   }
 
-  async createBunchHarvest(dto: CreateHarvestDto, userId: string) {
-    const farm = await this.getFarm(userId);
+  async createBunchHarvest(dto: CreateHarvestDto, farmId: string, userId: string) {
     const bunchCount = dto.bunchCount ? Number(dto.bunchCount) : 0;
     const pricePerBunch = dto.pricePerBunch ? Number(dto.pricePerBunch) : null;
     const avgBunchWeight = dto.avgBunchWeight ? Number(dto.avgBunchWeight) : null;
@@ -51,7 +46,7 @@ export class HarvestsService {
 
     const harvest = await this.prisma.harvest.create({
       data: {
-        farmId: farm.id,
+        farmId,
         batchId: dto.batchId,
         harvestDate: new Date(dto.harvestDate),
         bunchCount,
@@ -68,8 +63,7 @@ export class HarvestsService {
     return harvest;
   }
 
-  async createSuckerHarvest(dto: CreateHarvestDto, userId: string) {
-    const farm = await this.getFarm(userId);
+  async createSuckerHarvest(dto: CreateHarvestDto, farmId: string, userId: string) {
     const suckerCount = dto.suckerCount ? Number(dto.suckerCount) : 0;
     const soldCount = dto.soldCount ? Number(dto.soldCount) : 0;
     const pricePerSucker = dto.pricePerSucker ? Number(dto.pricePerSucker) : null;
@@ -95,9 +89,8 @@ export class HarvestsService {
     return harvest;
   }
 
-  async updateBunch(id: string, dto: UpdateHarvestDto, userId: string) {
-    const farm = await this.getFarm(userId);
-    const existing = await this.prisma.harvest.findFirst({ where: { id, farmId: farm.id } });
+  async updateBunch(id: string, dto: UpdateHarvestDto, farmId: string, userId: string) {
+    const existing = await this.prisma.harvest.findFirst({ where: { id, farmId } });
     if (!existing) throw new NotFoundException('Harvest not found');
 
     const bunchCount = dto.bunchCount != null ? Number(dto.bunchCount) : existing.bunchCount;
@@ -124,9 +117,8 @@ export class HarvestsService {
     return updated;
   }
 
-  async updateSucker(id: string, dto: UpdateHarvestDto, userId: string) {
-    const farm = await this.getFarm(userId);
-    const existing = await this.prisma.suckerHarvest.findFirst({ where: { id, batch: { farmId: farm.id } } });
+  async updateSucker(id: string, dto: UpdateHarvestDto, farmId: string, userId: string) {
+    const existing = await this.prisma.suckerHarvest.findFirst({ where: { id, batch: { farmId } } });
     if (!existing) throw new NotFoundException('Sucker harvest not found');
 
     const soldCount = dto.soldCount != null ? Number(dto.soldCount) : existing.soldCount ?? 0;
@@ -150,18 +142,16 @@ export class HarvestsService {
     return updated;
   }
 
-  async removeBunch(id: string, userId: string) {
-    const farm = await this.getFarm(userId);
-    const existing = await this.prisma.harvest.findFirst({ where: { id, farmId: farm.id } });
+  async removeBunch(id: string, farmId: string, userId: string) {
+    const existing = await this.prisma.harvest.findFirst({ where: { id, farmId } });
     if (!existing) throw new NotFoundException('Harvest not found');
     await this.prisma.harvest.delete({ where: { id } });
     await this.logChange('Harvest', id, 'delete', userId, existing, null);
     return { success: true };
   }
 
-  async removeSucker(id: string, userId: string) {
-    const farm = await this.getFarm(userId);
-    const existing = await this.prisma.suckerHarvest.findFirst({ where: { id, batch: { farmId: farm.id } } });
+  async removeSucker(id: string, farmId: string, userId: string) {
+    const existing = await this.prisma.suckerHarvest.findFirst({ where: { id, batch: { farmId } } });
     if (!existing) throw new NotFoundException('Sucker harvest not found');
     await this.prisma.suckerHarvest.delete({ where: { id } });
     await this.logChange('SuckerHarvest', id, 'delete', userId, existing, null);
@@ -172,11 +162,5 @@ export class HarvestsService {
     await this.prisma.changeLog.create({
       data: { entityType, entityId, action, userId, ...(before != null && { before }), ...(after != null && { after }) },
     });
-  }
-
-  private async getFarm(userId: string) {
-    const farm = await this.prisma.farm.findUnique({ where: { ownerId: userId } });
-    if (!farm) throw new NotFoundException('No farm found');
-    return farm;
   }
 }

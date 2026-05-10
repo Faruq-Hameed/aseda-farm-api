@@ -7,16 +7,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum MemberRole {
+  OWNER
+  MANAGER
+  WORKER
+  VIEWER
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String
   email         String    @unique
   password      String
-  role          String    @default("owner")
+  phone         String?
+  role          String    @default("OWNER")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   farm          Farm?
+  memberships   FarmMember[] @relation("UserMemberships")
+  addedMembers  FarmMember[] @relation("AddedByUser")
   notifications Notification[]
   activityLogs  ActivityLog[]
   changeLogs    ChangeLog[]
@@ -37,6 +47,23 @@ model Farm {
   activities ActivityLog[]
   expenses   Expense[]
   harvests   Harvest[]
+  members    FarmMember[]
+}
+
+model FarmMember {
+  id        String     @id @default(cuid())
+  farmId    String
+  userId    String
+  role      MemberRole @default(WORKER)
+  addedById String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  farm    Farm @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  user    User @relation("UserMemberships", fields: [userId], references: [id], onDelete: Cascade)
+  addedBy User @relation("AddedByUser", fields: [addedById], references: [id])
+
+  @@unique([farmId, userId])
 }
 
 model Batch {

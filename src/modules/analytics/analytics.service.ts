@@ -5,25 +5,25 @@ import { PrismaService } from '../prisma/prisma.service';
 export class AnalyticsService {
   constructor(private prisma: PrismaService) {}
 
-  async getSummary(userId: string) {
-    const farm = await this.prisma.farm.findUnique({ where: { ownerId: userId } });
+  async getSummary(farmId: string) {
+    const farm = await this.prisma.farm.findUnique({ where: { id: farmId } });
     if (!farm) throw new NotFoundException('No farm found');
 
     const [harvests, expenses, tasks, batches, suckerHarvests] = await Promise.all([
-      this.prisma.harvest.findMany({ where: { farmId: farm.id }, orderBy: { harvestDate: 'asc' } }),
-      this.prisma.expense.findMany({ where: { farmId: farm.id } }),
-      this.prisma.task.findMany({ where: { farmId: farm.id } }),
-      this.prisma.batch.findMany({ where: { farmId: farm.id } }),
-      this.prisma.suckerHarvest.findMany({ where: { batch: { farmId: farm.id } } }),
+      this.prisma.harvest.findMany({ where: { farmId }, orderBy: { harvestDate: 'asc' } }),
+      this.prisma.expense.findMany({ where: { farmId } }),
+      this.prisma.task.findMany({ where: { farmId } }),
+      this.prisma.batch.findMany({ where: { farmId } }),
+      this.prisma.suckerHarvest.findMany({ where: { batch: { farmId } } }),
     ]);
 
     const totalRevenue = harvests.reduce((s, h) => s + (h.totalRevenue || 0), 0);
     const totalSuckerRevenue = suckerHarvests.reduce((s, sh) => s + (sh.revenue || 0), 0);
     const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-    const netProfit = totalRevenue - totalExpenses;
+    // Include sucker revenue in net profit calculation
+    const netProfit = totalRevenue + totalSuckerRevenue - totalExpenses;
     const totalPlants = batches.reduce((s, b) => s + b.plantCount, 0);
 
-    // Monthly revenue
     const monthlyRevenue: Record<string, number> = {};
     for (const h of harvests) {
       const key = `${h.harvestDate.getFullYear()}-${String(h.harvestDate.getMonth() + 1).padStart(2, '0')}`;
@@ -34,20 +34,17 @@ export class AnalyticsService {
       revenue,
     }));
 
-    // Expense by category
     const expenseByCategory: Record<string, number> = {};
     for (const e of expenses) {
       expenseByCategory[e.category] = (expenseByCategory[e.category] || 0) + e.amount;
     }
 
-    // Revenue by channel
     const revenueByChannel: Record<string, number> = {};
     for (const h of harvests) {
       const ch = h.channel || 'other';
       revenueByChannel[ch] = (revenueByChannel[ch] || 0) + (h.totalRevenue || 0);
     }
 
-    // Task status
     const taskStatus = {
       completed: tasks.filter((t) => t.status === 'completed').length,
       overdue: tasks.filter((t) => t.status === 'overdue').length,

@@ -10,10 +10,9 @@ export { CreateBatchDto, UpdateBatchDto };
 export class BatchesService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(userId: string) {
-    const farm = await this.getFarm(userId);
+  async findAll(farmId: string) {
     return this.prisma.batch.findMany({
-      where: { farmId: farm.id },
+      where: { farmId },
       include: {
         _count: { select: { tasks: true, activities: true, harvests: true } },
         harvests: { select: { totalRevenue: true } },
@@ -22,10 +21,9 @@ export class BatchesService {
     });
   }
 
-  async findOne(id: string, userId: string) {
-    const farm = await this.getFarm(userId);
+  async findOne(id: string, farmId: string) {
     const batch = await this.prisma.batch.findFirst({
-      where: { id, farmId: farm.id },
+      where: { id, farmId },
       include: {
         tasks: { orderBy: { dueDate: 'asc' } },
         activities: {
@@ -40,11 +38,10 @@ export class BatchesService {
     return batch;
   }
 
-  async create(dto: CreateBatchDto, userId: string) {
-    const farm = await this.getFarm(userId);
+  async create(dto: CreateBatchDto, farmId: string, userId: string) {
     const batch = await this.prisma.batch.create({
       data: {
-        farmId: farm.id,
+        farmId,
         name: dto.name,
         plantCount: Number(dto.plantCount),
         plantingDate: new Date(dto.plantingDate),
@@ -59,16 +56,16 @@ export class BatchesService {
     });
 
     if (dto.status !== 'planned') {
-      const tasks = generateTasksForBatch(new Date(dto.plantingDate), batch.id, farm.id);
+      const tasks = generateTasksForBatch(new Date(dto.plantingDate), batch.id, farmId);
       await this.prisma.task.createMany({ data: tasks });
     }
 
+    await this.prisma.changeLog.create({ data: { entityType: 'Batch', entityId: batch.id, action: 'create', userId, after: batch } });
     return batch;
   }
 
-  async update(id: string, dto: UpdateBatchDto, userId: string) {
-    const farm = await this.getFarm(userId);
-    const batch = await this.prisma.batch.findFirst({ where: { id, farmId: farm.id } });
+  async update(id: string, dto: UpdateBatchDto, farmId: string, userId: string) {
+    const batch = await this.prisma.batch.findFirst({ where: { id, farmId } });
     if (!batch) throw new NotFoundException('Batch not found');
     const updated = await this.prisma.batch.update({
       where: { id },
@@ -82,18 +79,11 @@ export class BatchesService {
     return updated;
   }
 
-  async remove(id: string, userId: string) {
-    const farm = await this.getFarm(userId);
-    const batch = await this.prisma.batch.findFirst({ where: { id, farmId: farm.id } });
+  async remove(id: string, farmId: string, userId: string) {
+    const batch = await this.prisma.batch.findFirst({ where: { id, farmId } });
     if (!batch) throw new NotFoundException('Batch not found');
     await this.prisma.batch.delete({ where: { id } });
-    await this.prisma.changeLog.create({ data: { entityType: 'Batch', entityId: id, action: 'delete', userId, before: batch, after: undefined } });
+    await this.prisma.changeLog.create({ data: { entityType: 'Batch', entityId: id, action: 'delete', userId, before: batch } });
     return { success: true };
-  }
-
-  private async getFarm(userId: string) {
-    const farm = await this.prisma.farm.findUnique({ where: { ownerId: userId } });
-    if (!farm) throw new NotFoundException('No farm found for this user');
-    return farm;
   }
 }

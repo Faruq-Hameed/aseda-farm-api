@@ -1,34 +1,33 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     private prisma: PrismaService,
     private email: EmailService,
   ) {}
 
-  async findAll(userId: string, limit?: number) {
+  async findAll(userId: string, limit = 50) {
     return this.prisma.notification.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
-      ...(limit && { take: limit }),
+      take: limit,
     });
   }
 
   async markRead(id: string, userId: string) {
-    return this.prisma.notification.update({
-      where: { id },
-      data: { isRead: true },
-    });
+    // Verify ownership before updating
+    const notification = await this.prisma.notification.findFirst({ where: { id, userId } });
+    if (!notification) return { success: false };
+    return this.prisma.notification.update({ where: { id }, data: { isRead: true } });
   }
 
   async markAllRead(userId: string) {
-    await this.prisma.notification.updateMany({
-      where: { userId },
-      data: { isRead: true },
-    });
+    await this.prisma.notification.updateMany({ where: { userId }, data: { isRead: true } });
     return { success: true };
   }
 
@@ -49,17 +48,49 @@ export class NotificationsService {
   async processDaily() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const users = await this.prisma.user.findMany({ include: { farm: true } });
 
-    for (const user of users) {
-      if (!user.farm) continue;
+    // Process all farms, sending notifications to every member of each farm
+    const farms = await this.prisma.farm.findMany({
+      include: {
+        members: {
+          include: { user: true },
+        },
+      },
+    });
 
-      const settings = await this.prisma.notificationSetting.findUnique({
-        where: { userId: user.id },
-      });
-      const daysBefore = settings?.emailDaysBefore ?? 3;
+    for (const farm of farms) {
+      await this.processFarm(farm, today);
+    }
+  }
 
-      // Reminder emails for upcoming tasks
+  private async processFarm(farm: any, today: Date) {
+    const settings = await this.prisma.notificationSetting.findFirst({
+      where: { userId: farm.ownerId },
+    });
+    const daysBefore = settings?.emailDaysBefore ?? 3;
+
+    // Mark tasks overdue for this farm
+    await this.prisma.task.updateMany({
+      where: {
+        farmId: farm.id,
+        dueDate: { lt: today },
+        status: { in: ['pending', 'in_progress'] },
+      },
+      data: { status: 'overdue' },
+    });
+
+    const overdueTasks = await this.prisma.task.findMany({
+      where: { farmId: farm.id, status: 'overdue' },
+      include: { batch: true },
+      take: 20,
+    });
+
+    // Send notifications to each farm member
+    for (const membership of farm.members) {
+      const user = membership.user;
+      const userSettings = await this.prisma.notificationSetting.findUnique({ where: { userId: user.id } });
+
+      // Task due reminders
       for (const days of [1, 3, 7].filter((d) => d <= daysBefore || d === 1)) {
         const target = new Date(today);
         target.setDate(target.getDate() + days);
@@ -68,7 +99,7 @@ export class NotificationsService {
 
         const tasks = await this.prisma.task.findMany({
           where: {
-            farmId: user.farm.id,
+            farmId: farm.id,
             dueDate: { gte: target, lt: next },
             status: { in: ['pending', 'in_progress'] },
           },
@@ -94,7 +125,7 @@ export class NotificationsService {
             type: 'task_due',
           });
 
-          if (settings?.emailEnabled !== false) {
+          if (userSettings?.emailEnabled !== false) {
             await this.email.sendTaskReminder({
               to: user.email,
               taskTitle: task.title,
@@ -110,24 +141,9 @@ export class NotificationsService {
         }
       }
 
-      // Mark overdue
-      await this.prisma.task.updateMany({
-        where: {
-          farmId: user.farm.id,
-          dueDate: { lt: today },
-          status: { in: ['pending', 'in_progress'] },
-        },
-        data: { status: 'overdue' },
-      });
-
-      const overdueTasks = await this.prisma.task.findMany({
-        where: { farmId: user.farm.id, status: 'overdue' },
-        include: { batch: true },
-        take: 20,
-      });
-
+      // Overdue alerts
       for (const task of overdueTasks) {
-        if (settings?.overdueAlerts === false) continue;
+        if (userSettings?.overdueAlerts === false) continue;
         const already = await this.prisma.notification.findFirst({
           where: {
             userId: user.id,
@@ -147,8 +163,8 @@ export class NotificationsService {
         });
       }
 
-      // Daily digest
-      if (settings?.dailyDigest !== false && settings?.emailEnabled !== false) {
+      // Daily digest — only send when there is something worth reporting
+      if (userSettings?.dailyDigest !== false && userSettings?.emailEnabled !== false) {
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
         const nextWeek = new Date(today);
@@ -156,22 +172,25 @@ export class NotificationsService {
 
         const [todaysTasks, upcomingTasks] = await Promise.all([
           this.prisma.task.findMany({
-            where: { farmId: user.farm.id, dueDate: { gte: today, lt: tomorrow }, status: { in: ['pending', 'in_progress'] } },
+            where: { farmId: farm.id, dueDate: { gte: today, lt: tomorrow }, status: { in: ['pending', 'in_progress'] } },
             include: { batch: true },
           }),
           this.prisma.task.findMany({
-            where: { farmId: user.farm.id, dueDate: { gte: tomorrow, lt: nextWeek }, status: { in: ['pending', 'in_progress'] } },
+            where: { farmId: farm.id, dueDate: { gte: tomorrow, lt: nextWeek }, status: { in: ['pending', 'in_progress'] } },
             include: { batch: true },
           }),
         ]);
 
-        await this.email.sendDailyDigest({
-          to: user.email,
-          todaysTasks,
-          overdueTasks,
-          upcomingTasks,
-          date: today.toLocaleDateString('en-NG'),
-        });
+        // Skip empty digests — only send when there is actionable content
+        if (todaysTasks.length > 0 || overdueTasks.length > 0 || upcomingTasks.length > 0) {
+          await this.email.sendDailyDigest({
+            to: user.email,
+            todaysTasks,
+            overdueTasks,
+            upcomingTasks,
+            date: today.toLocaleDateString('en-NG'),
+          }).catch((err) => this.logger.error(`Failed to send digest to ${user.email}`, err));
+        }
       }
     }
   }
