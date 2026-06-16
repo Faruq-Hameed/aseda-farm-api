@@ -14,7 +14,6 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
-  
   const port = process.env.PORT || 3001;
   await app.listen(port);
   console.log(`🌿 ASEDA Farm API running on http://localhost:${port}/api`);
