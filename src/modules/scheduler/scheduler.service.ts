@@ -1,14 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { NotificationsService } from '../notifications/notifications.service';
 
+// Triggered externally by the frontend's Vercel Cron (see aseda-farm/app/api/cron/daily)
+// rather than an in-process @Cron timer, since the API host can spin down when idle
+// and an in-process timer would silently miss its schedule while asleep.
 @Injectable()
 export class SchedulerService {
   private readonly logger = new Logger(SchedulerService.name);
 
   constructor(private notificationsService: NotificationsService) {}
 
-  @Cron('0 7 * * *') // Every day at 7:00 AM
   async handleDailyNotifications() {
     this.logger.log('Running daily notification job...');
     try {
