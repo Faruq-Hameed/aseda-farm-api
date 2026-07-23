@@ -67,16 +67,48 @@ export class BatchesService {
   async update(id: string, dto: UpdateBatchDto, farmId: string, userId: string) {
     const batch = await this.prisma.batch.findFirst({ where: { id, farmId } });
     if (!batch) throw new NotFoundException('Batch not found');
+    const { adjustmentReason, ...rest } = dto;
     const updated = await this.prisma.batch.update({
       where: { id },
       data: {
-        ...dto,
+        ...rest,
         expectedHarvestStart: dto.expectedHarvestStart ? new Date(dto.expectedHarvestStart) : undefined,
         expectedHarvestEnd: dto.expectedHarvestEnd ? new Date(dto.expectedHarvestEnd) : undefined,
       },
     });
-    await this.prisma.changeLog.create({ data: { entityType: 'Batch', entityId: id, action: 'update', userId, before: batch, after: updated } });
+
+    let summary: string | undefined;
+    if (dto.plantCount !== undefined && Number(dto.plantCount) !== batch.plantCount) {
+      const direction = Number(dto.plantCount) > batch.plantCount ? 'increased' : 'reduced';
+      summary = `Plant count ${direction} from ${batch.plantCount} to ${dto.plantCount}`;
+      if (adjustmentReason) summary += `: ${adjustmentReason}`;
+    }
+
+    await this.prisma.changeLog.create({
+      data: { entityType: 'Batch', entityId: id, action: 'update', userId, before: batch, after: updated, summary },
+    });
+
+    // A batch created as "planned" gets no task schedule up front; generate the standard
+    // plantain schedule the moment it becomes active, same as a normal batch would at creation.
+    if (batch.status === 'planned' && updated.status !== 'planned') {
+      const existingTasks = await this.prisma.task.count({ where: { batchId: id } });
+      if (existingTasks === 0) {
+        const tasks = generateTasksForBatch(updated.plantingDate, id, farmId);
+        await this.prisma.task.createMany({ data: tasks });
+      }
+    }
+
     return updated;
+  }
+
+  async getHistory(id: string, farmId: string) {
+    const batch = await this.prisma.batch.findFirst({ where: { id, farmId } });
+    if (!batch) throw new NotFoundException('Batch not found');
+    return this.prisma.changeLog.findMany({
+      where: { entityType: 'Batch', entityId: id },
+      include: { user: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async remove(id: string, farmId: string, userId: string) {

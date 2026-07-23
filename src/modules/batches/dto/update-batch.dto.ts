@@ -11,4 +11,5 @@ export class UpdateBatchDto {
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsString() expectedHarvestStart?: string;
   @IsOptional() @IsString() expectedHarvestEnd?: string;
+  @IsOptional() @IsString() adjustmentReason?: string;
 }

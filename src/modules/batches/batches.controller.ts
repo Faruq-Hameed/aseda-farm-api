@@ -19,6 +19,11 @@ export class BatchesController {
     return this.batchesService.findOne(id, req.user.farmId);
   }
 
+  @Get(':id/history')
+  getHistory(@Param('id') id: string, @Request() req: any) {
+    return this.batchesService.getHistory(id, req.user.farmId);
+  }
+
   @Post()
   @UseGuards(RolesGuard)
   @Roles('OWNER', 'MANAGER', 'WORKER')
