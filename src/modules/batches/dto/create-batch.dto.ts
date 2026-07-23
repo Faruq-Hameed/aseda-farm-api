@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 
 export class CreateBatchDto {
   @IsString() name!: string;
+  @IsOptional() @IsString() cropType?: string;
   @Type(() => Number) @IsNumber() plantCount!: number;
   @IsString() plantingDate!: string;
   @IsOptional() @IsString() variety?: string;

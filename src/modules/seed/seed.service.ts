@@ -67,7 +67,7 @@ export class SeedService {
 
     const existingTasks = await this.prisma.task.count({ where: { batchId: batch1.id } });
     if (existingTasks === 0) {
-      const tasks = generateTasksForBatch(batch1PlantingDate, batch1.id, farm.id);
+      const tasks = generateTasksForBatch('plantain', batch1PlantingDate, batch1.id, farm.id);
       await this.prisma.task.createMany({ data: tasks });
     }
 

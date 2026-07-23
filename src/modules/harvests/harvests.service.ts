@@ -12,7 +12,7 @@ export class HarvestsService {
   async findBunchHarvests(farmId: string) {
     return this.prisma.harvest.findMany({
       where: { farmId },
-      include: { batch: { select: { id: true, name: true } } },
+      include: { batch: { select: { id: true, name: true, cropType: true } } },
       orderBy: { harvestDate: 'desc' },
     });
   }
@@ -20,19 +20,19 @@ export class HarvestsService {
   async findSuckerHarvests(farmId: string) {
     return this.prisma.suckerHarvest.findMany({
       where: { batch: { farmId } },
-      include: { batch: { select: { id: true, name: true } } },
+      include: { batch: { select: { id: true, name: true, cropType: true } } },
       orderBy: { harvestDate: 'desc' },
     });
   }
 
   async findOneBunch(id: string, farmId: string) {
-    const harvest = await this.prisma.harvest.findFirst({ where: { id, farmId }, include: { batch: { select: { id: true, name: true } } } });
+    const harvest = await this.prisma.harvest.findFirst({ where: { id, farmId }, include: { batch: { select: { id: true, name: true, cropType: true } } } });
     if (!harvest) throw new NotFoundException('Harvest not found');
     return harvest;
   }
 
   async findOneSucker(id: string, farmId: string) {
-    const harvest = await this.prisma.suckerHarvest.findFirst({ where: { id, batch: { farmId } }, include: { batch: { select: { id: true, name: true } } } });
+    const harvest = await this.prisma.suckerHarvest.findFirst({ where: { id, batch: { farmId } }, include: { batch: { select: { id: true, name: true, cropType: true } } } });
     if (!harvest) throw new NotFoundException('Sucker harvest not found');
     return harvest;
   }

@@ -6,6 +6,14 @@ import { UpdateBatchDto } from './dto/update-batch.dto';
 
 export { CreateBatchDto, UpdateBatchDto };
 
+const CROP_DEFAULTS: Record<string, { variety: string; spacing: string }> = {
+  plantain: { variety: 'Agbagba', spacing: '3m x 2m' },
+  maize: { variety: 'Oba Super 2', spacing: '75cm x 25cm' },
+  sweet_potato: { variety: 'TIS 87/0087', spacing: '1m x 30cm' },
+  cassava: { variety: 'TME 419', spacing: '1m x 1m' },
+  cocoyam: { variety: 'White Cocoyam (Ile-Ile)', spacing: '1m x 1m' },
+};
+
 @Injectable()
 export class BatchesService {
   constructor(private prisma: PrismaService) {}
@@ -39,14 +47,17 @@ export class BatchesService {
   }
 
   async create(dto: CreateBatchDto, farmId: string, userId: string) {
+    const cropType = dto.cropType || 'plantain';
+    const defaults = CROP_DEFAULTS[cropType] || CROP_DEFAULTS.plantain;
     const batch = await this.prisma.batch.create({
       data: {
         farmId,
         name: dto.name,
+        cropType,
         plantCount: Number(dto.plantCount),
         plantingDate: new Date(dto.plantingDate),
-        variety: dto.variety || 'Agbagba',
-        spacing: dto.spacing || '3m x 2m',
+        variety: dto.variety || defaults.variety,
+        spacing: dto.spacing || defaults.spacing,
         acresCovered: dto.acresCovered ? Number(dto.acresCovered) : 0,
         status: dto.status || 'growing',
         expectedHarvestStart: dto.expectedHarvestStart ? new Date(dto.expectedHarvestStart) : undefined,
@@ -56,7 +67,7 @@ export class BatchesService {
     });
 
     if (dto.status !== 'planned') {
-      const tasks = generateTasksForBatch(new Date(dto.plantingDate), batch.id, farmId);
+      const tasks = generateTasksForBatch(cropType, new Date(dto.plantingDate), batch.id, farmId);
       await this.prisma.task.createMany({ data: tasks });
     }
 
@@ -93,7 +104,7 @@ export class BatchesService {
     if (batch.status === 'planned' && updated.status !== 'planned') {
       const existingTasks = await this.prisma.task.count({ where: { batchId: id } });
       if (existingTasks === 0) {
-        const tasks = generateTasksForBatch(updated.plantingDate, id, farmId);
+        const tasks = generateTasksForBatch(updated.cropType, updated.plantingDate, id, farmId);
         await this.prisma.task.createMany({ data: tasks });
       }
     }

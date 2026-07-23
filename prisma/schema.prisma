@@ -72,6 +72,7 @@ model Batch {
   farmId               String
   farm                 Farm      @relation(fields: [farmId], references: [id])
   name                 String
+  cropType             String    @default("plantain")
   plantCount           Int
   plantingDate         DateTime
   variety              String    @default("Agbagba")
