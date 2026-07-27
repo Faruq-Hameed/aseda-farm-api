@@ -8,14 +8,16 @@ export class SeedService {
   constructor(private prisma: PrismaService) {}
 
   async seed() {
-    const hashed = await bcrypt.hash('aseda2026', 12);
+    const adminEmail = process.env.SEED_ADMIN_EMAIL || 'admin@asedafarm.ng';
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'aseda2026';
+    const hashed = await bcrypt.hash(adminPassword, 12);
 
     const user = await this.prisma.user.upsert({
-      where: { email: 'admin@asedafarm.ng' },
+      where: { email: adminEmail },
       update: {},
       create: {
         name: 'ASEDA Farm Admin',
-        email: 'admin@asedafarm.ng',
+        email: adminEmail,
         password: hashed,
         role: 'OWNER',
       },
