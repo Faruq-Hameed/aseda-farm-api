@@ -16,6 +16,8 @@ export class SeedController {
     if (this.config.get('NODE_ENV') === 'production') {
       return { error: 'Not allowed in production' };
     }
-    return this.seedService.seed();
+    // return this.seedService.seed();
+    return null;
+    
   }
 }
