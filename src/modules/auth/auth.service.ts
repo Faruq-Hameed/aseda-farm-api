@@ -22,7 +22,7 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
     const valid = await bcrypt.compare(password, user.password);
-    // if (!valid) throw new UnauthorizedException('Invalid credentials');
+     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
     const { password: _, ...result } = user;
     return result;
